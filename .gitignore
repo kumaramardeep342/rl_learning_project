@@ -219,3 +219,5 @@ __marimo__/
 
 # my work
 git.ipynb
+*.pt
+*.pkl

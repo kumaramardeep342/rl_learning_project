@@ -1,4 +1,4 @@
-# Inside policy_0.py
+# starter_policy_file.py
 def run_policy(observation):
     inv = observation["inventory"]
     q1 = 20 if inv[0] < 50 else 0
