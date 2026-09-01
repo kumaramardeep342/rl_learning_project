@@ -1,4 +1,4 @@
-# Reinforce Policy Learning Model
+# Proximal Policy Optimizaton (PPO) Policy
 # Name : Amardeep Kumar
 # Roll No : DA25M502
 
@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-MODEL_PATH = Path(__file__).parent / "reinforce_weights.pt"
+MODEL_PATH = Path(__file__).parent / "ppo_weights.pt"
 checkpoint = torch.load(MODEL_PATH, map_location=torch.device("cpu"))
 
 STATE_DIM = checkpoint["state_dim"]
@@ -15,25 +15,32 @@ ACTION_DIM = checkpoint["action_dim"]
 ALLOWED_ACTIONS = checkpoint["actions"]
 
 
-class PolicyNetwork(nn.Module):
+class ActorCriticPPO(nn.Module):
 
     def __init__(self, state_dim: int, action_dim: int):
         super().__init__()
-        self.net = nn.Sequential(
+        self.actor = nn.Sequential(
             nn.Linear(state_dim, 128),
-            nn.LayerNorm(128),
             nn.Tanh(),
             nn.Linear(128, 128),
-            nn.LayerNorm(128),
             nn.Tanh(),
             nn.Linear(128, action_dim),
         )
+        self.critic = nn.Sequential(
+            nn.Linear(state_dim, 128),
+            nn.Tanh(),
+            nn.Linear(128, 128),
+            nn.Tanh(),
+            nn.Linear(128, 1),
+        )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+    def forward(self, x: torch.Tensor):
+        logits = self.actor(x)
+        val = self.critic(x)
+        return logits, val
 
 
-MODEL = PolicyNetwork(STATE_DIM, ACTION_DIM)
+MODEL = ActorCriticPPO(STATE_DIM, ACTION_DIM)
 MODEL.load_state_dict(checkpoint["model_state"])
 MODEL.eval()
 
@@ -54,11 +61,11 @@ def _preprocess_obs(obs: dict) -> np.ndarray:
 
 
 def run_policy(observation):
-    """Deterministic inference for REINFORCE."""
+    """Deterministic inference for PPO."""
     state = _preprocess_obs(observation)
     with torch.no_grad():
         state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        logits = MODEL(state_t)
+        logits, _ = MODEL(state_t)
         action_idx = int(logits.argmax(dim=1).item())
 
     return [int(q) for q in ALLOWED_ACTIONS[action_idx]]

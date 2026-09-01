@@ -28,10 +28,9 @@ def _get_state(obs: dict) -> tuple:
     return (b1, b2, b3)
 
 def run_policy(observation):
-    """Deterministic entrypoint for TD(lambda) inference."""
     state = _get_state(observation)
     if state in Q_TABLE:
         action_idx = int(np.argmax(Q_TABLE[state]))
     else:
-        action_idx = 1  # Base replenishment default
+        action_idx = 1
     return [int(q) for q in ALLOWED_ACTIONS[action_idx]]

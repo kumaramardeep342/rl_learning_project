@@ -1,4 +1,4 @@
-# Reinforce Policy Learning Model
+# Deep Q-Network Policy Learning
 # Name : Amardeep Kumar
 # Roll No : DA25M502
 
@@ -7,7 +7,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-MODEL_PATH = Path(__file__).parent / "reinforce_weights.pt"
+# Load checkpoint on CPU for fast portable inference
+MODEL_PATH = Path(__file__).parent / "dqn_weights.pt"
 checkpoint = torch.load(MODEL_PATH, map_location=torch.device("cpu"))
 
 STATE_DIM = checkpoint["state_dim"]
@@ -15,17 +16,15 @@ ACTION_DIM = checkpoint["action_dim"]
 ALLOWED_ACTIONS = checkpoint["actions"]
 
 
-class PolicyNetwork(nn.Module):
+class QNetwork(nn.Module):
 
     def __init__(self, state_dim: int, action_dim: int):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(state_dim, 128),
-            nn.LayerNorm(128),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.Linear(128, 128),
-            nn.LayerNorm(128),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.Linear(128, action_dim),
         )
 
@@ -33,7 +32,7 @@ class PolicyNetwork(nn.Module):
         return self.net(x)
 
 
-MODEL = PolicyNetwork(STATE_DIM, ACTION_DIM)
+MODEL = QNetwork(STATE_DIM, ACTION_DIM)
 MODEL.load_state_dict(checkpoint["model_state"])
 MODEL.eval()
 
@@ -54,11 +53,10 @@ def _preprocess_obs(obs: dict) -> np.ndarray:
 
 
 def run_policy(observation):
-    """Deterministic inference for REINFORCE."""
+    """Deterministic inference for DQN."""
     state = _preprocess_obs(observation)
     with torch.no_grad():
         state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        logits = MODEL(state_t)
-        action_idx = int(logits.argmax(dim=1).item())
+        action_idx = int(MODEL(state_t).argmax(dim=1).item())
 
     return [int(q) for q in ALLOWED_ACTIONS[action_idx]]
