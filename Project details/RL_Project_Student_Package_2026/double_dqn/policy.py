@@ -39,48 +39,25 @@ MODEL.eval()
 
 
 def _preprocess_obs(obs: dict) -> np.ndarray:
-    """Preprocesses observation into normalized relative state features."""
-    inv = np.asarray(obs["inventory"], dtype=np.float32).flatten()
-    pipeline = np.asarray(obs["arrival_pipeline"], dtype=np.float32)
-
-    # 1. Total Inventory Position (On-hand + In-flight)
-    inv_pos = inv + pipeline.sum(axis=1)
-
-    # 2. Normalized Days of Supply (using variant reference means: 30, 25, 35)
-    mean_demands = np.array([30.0, 25.0, 35.0], dtype=np.float32)
-    days_of_supply = (inv_pos / mean_demands) / 5.0
-
-    # 3. Warehouse storage volume slack (Capacity = 1000)
-    current_vol = 2.0 * inv[0] + 3.0 * inv[1] + 1.5 * inv[2]
-    vol_slack = (1000.0 - current_vol) / 1000.0
-
-    # 4. Normalized in-transit pipeline profile
-    pipe_norm = pipeline.flatten() / 100.0
-
-    # 5. Short-term and long-term demand trends
-    demand_hist = np.asarray(obs["demand_history"], dtype=np.float32)
-    d_mean_3 = demand_hist[-3:].mean(axis=0) / 50.0
-    d_mean_7 = demand_hist.mean(axis=0) / 50.0
-
-    # 6. Horizon step counter
-    day_norm = np.asarray([obs["day"]], dtype=np.float32).flatten() / 50.0
-
-    return np.concatenate([
-        days_of_supply,
-        inv / 200.0,
-        [vol_slack],
-        pipe_norm,
-        d_mean_3,
-        d_mean_7,
-        day_norm,
-    ])
+    inv = np.asarray(obs["inventory"], dtype=np.float32).flatten() / 200.0
+    pipeline = (
+        np.asarray(obs["arrival_pipeline"], dtype=np.float32).flatten() / 100.0
+    )
+    demand = (
+        np.asarray(obs["demand_history"], dtype=np.float32).flatten() / 50.0
+    )
+    day = np.asarray([obs["day"]], dtype=np.float32).flatten() / 50.0
+    util = np.asarray(
+        [obs["capacity_utilisation"]], dtype=np.float32
+    ).flatten()
+    return np.concatenate([inv, pipeline, demand, day, util])
 
 
 def run_policy(observation):
-    """Deterministic inference entrypoint for evaluation."""
+    """Deterministic inference for Double DQN."""
     state = _preprocess_obs(observation)
     with torch.no_grad():
-        s_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        action_idx = int(MODEL(s_t).argmax(dim=1).item())
+        state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        action_idx = int(MODEL(state_t).argmax(dim=1).item())
 
     return [int(q) for q in ALLOWED_ACTIONS[action_idx]]

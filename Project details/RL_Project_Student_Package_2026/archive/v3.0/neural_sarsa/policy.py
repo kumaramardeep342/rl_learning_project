@@ -37,15 +37,29 @@ MODEL.eval()
 def _preprocess_obs(obs: dict) -> np.ndarray:
     inv = np.asarray(obs["inventory"], dtype=np.float32).flatten()
     pipeline = np.asarray(obs["arrival_pipeline"], dtype=np.float32)
-    inv_pos = (inv + pipeline.sum(axis=1)) / 300.0
-    inv_norm = inv / 200.0
+
+    inv_pos = inv + pipeline.sum(axis=1)
+    mean_demands = np.array([30.0, 25.0, 35.0], dtype=np.float32)
+    days_of_supply = (inv_pos / mean_demands) / 5.0
+
+    current_vol = 2.0 * inv[0] + 3.0 * inv[1] + 1.5 * inv[2]
+    vol_slack = (1000.0 - current_vol) / 1000.0
+
     pipe_norm = pipeline.flatten() / 100.0
     demand_hist = np.asarray(obs["demand_history"], dtype=np.float32)
-    d_mean_7 = demand_hist.mean(axis=0) / 50.0
     d_mean_3 = demand_hist[-3:].mean(axis=0) / 50.0
+    d_mean_7 = demand_hist.mean(axis=0) / 50.0
     day_norm = np.asarray([obs["day"]], dtype=np.float32).flatten() / 50.0
-    cap_util = np.asarray([obs["capacity_utilisation"]], dtype=np.float32).flatten()
-    return np.concatenate([inv_pos, inv_norm, pipe_norm, d_mean_7, d_mean_3, day_norm, cap_util])
+
+    return np.concatenate([
+        days_of_supply,
+        inv / 200.0,
+        [vol_slack],
+        pipe_norm,
+        d_mean_3,
+        d_mean_7,
+        day_norm
+    ])
 
 def run_policy(observation):
     state = _preprocess_obs(observation)

@@ -3,9 +3,9 @@
 # Roll No : DA25M502
 
 from pathlib import Path
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
 MODEL_PATH = Path(__file__).parent / "neural_q_weights.pt"
 checkpoint = torch.load(MODEL_PATH, map_location=torch.device("cpu"))
@@ -24,7 +24,7 @@ class NeuralQNet(nn.Module):
             nn.Linear(128, 128),
             nn.LayerNorm(128),
             nn.ReLU(),
-            nn.Linear(128, action_dim)
+            nn.Linear(128, action_dim),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -35,18 +35,35 @@ MODEL.load_state_dict(checkpoint["model_state"])
 MODEL.eval()
 
 def _preprocess_obs(obs: dict) -> np.ndarray:
-    inv = np.asarray(obs["inventory"], dtype=np.float32).flatten() / 200.0
-    pipeline = np.asarray(obs["arrival_pipeline"], dtype=np.float32).flatten() / 100.0
-    demand = np.asarray(obs["demand_history"], dtype=np.float32).flatten() / 50.0
-    day = np.asarray([obs["day"]], dtype=np.float32).flatten() / 50.0
-    util = np.asarray([obs["capacity_utilisation"]], dtype=np.float32).flatten()
-    return np.concatenate([inv, pipeline, demand, day, util])
+    inv = np.asarray(obs["inventory"], dtype=np.float32).flatten()
+    pipeline = np.asarray(obs["arrival_pipeline"], dtype=np.float32)
+
+    inv_pos = inv + pipeline.sum(axis=1)
+    mean_demands = np.array([30.0, 25.0, 35.0], dtype=np.float32)
+    days_of_supply = (inv_pos / mean_demands) / 5.0
+
+    current_vol = 2.0 * inv[0] + 3.0 * inv[1] + 1.5 * inv[2]
+    vol_slack = (1000.0 - current_vol) / 1000.0
+
+    pipe_norm = pipeline.flatten() / 100.0
+    demand_hist = np.asarray(obs["demand_history"], dtype=np.float32)
+    d_mean_3 = demand_hist[-3:].mean(axis=0) / 50.0
+    d_mean_7 = demand_hist.mean(axis=0) / 50.0
+    day_norm = np.asarray([obs["day"]], dtype=np.float32).flatten() / 50.0
+
+    return np.concatenate([
+        days_of_supply,
+        inv / 200.0,
+        [vol_slack],
+        pipe_norm,
+        d_mean_3,
+        d_mean_7,
+        day_norm
+    ])
 
 def run_policy(observation):
-    """Deterministic inference for Neural Q-Learning."""
     state = _preprocess_obs(observation)
     with torch.no_grad():
-        state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        action_idx = int(MODEL(state_t).argmax(dim=1).item())
-
+        s_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        action_idx = int(MODEL(s_tensor).argmax(dim=1).item())
     return [int(q) for q in ALLOWED_ACTIONS[action_idx]]
